@@ -10,8 +10,10 @@ endif ()
 set(Vulkan_INCLUDE_DIR $ENV{VULKAN_SDK}/include)
 
 add_executable(marching_cube Source/main.cpp
-        Source/ShaderManager.cpp
-        Source/ShaderManager.h)
+        Source/Resource/ShaderManager.cpp
+        Source/Resource/ShaderManager.h
+        Source/Render/RenderContext.cpp
+        Source/Render/RenderContext.h)
 
 target_include_directories(marching_cube PRIVATE
         ${CMAKE_SOURCE_DIR}/External
