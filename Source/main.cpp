@@ -1,6 +1,7 @@
-#include <iostream>
+#include "ShaderManager.h"
 
 int main() {
-    std::cout << "Hello, World!" << std::endl;
+    ShaderManager shaderManager{};
+    shaderManager.compile();
     return 0;
 }
