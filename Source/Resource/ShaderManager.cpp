@@ -66,19 +66,32 @@ void ShaderManager::compile() {
             }
         }
 
-        Slang::ComPtr<slang::IBlob> spirvCode;
+        Slang::ComPtr<slang::IBlob> vertSpirvCode;
         {
             Slang::ComPtr<slang::IBlob> diagnosticsBlob;
             const SlangResult result = composedProgram->getEntryPointCode(
                 0,
                 0,
-                spirvCode.writeRef(),
+                vertSpirvCode.writeRef(),
                 diagnosticsBlob.writeRef());
             if (SLANG_FAILED(result)) {
                 throw std::runtime_error("Failed to get SPIRV code");
             }
         }
 
-        spirvCodes[file] = spirvCode;
+        Slang::ComPtr<slang::IBlob> fragSpirvCode;
+        {
+            Slang::ComPtr<slang::IBlob> diagnosticsBlob;
+            const SlangResult result = composedProgram->getEntryPointCode(
+                1,
+                0,
+                fragSpirvCode.writeRef(),
+                diagnosticsBlob.writeRef());
+            if (SLANG_FAILED(result)) {
+                throw std::runtime_error("Failed to get SPIRV code");
+            }
+        }
+
+        spirvCodes[file] = {vertSpirvCode, fragSpirvCode};
     }
 }

@@ -13,7 +13,9 @@ add_executable(marching_cube Source/main.cpp
         Source/Resource/ShaderManager.cpp
         Source/Resource/ShaderManager.h
         Source/Render/RenderContext.cpp
-        Source/Render/RenderContext.h)
+        Source/Render/RenderContext.h
+        Source/Render/Renderer.cpp
+        Source/Render/Renderer.h)
 
 target_include_directories(marching_cube PRIVATE
         ${CMAKE_SOURCE_DIR}/External

@@ -1,21 +1,27 @@
 #include "RenderContext.h"
 
-RenderContext::RenderContext(GLFWwindow* window, const std::string &appName) {
+#include <iostream>
+
+RenderContext::RenderContext(GLFWwindow *window) {
     context.emplace();
     vk::ApplicationInfo applicationInfo{};
     applicationInfo.sType = vk::StructureType::eApplicationInfo;
-    applicationInfo.pApplicationName = appName.c_str();
+    applicationInfo.pApplicationName = glfwGetWindowTitle(window);
     applicationInfo.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
     applicationInfo.pEngineName = "Vulkan Engine";
     applicationInfo.engineVersion = VK_MAKE_VERSION(1, 0, 0);
     applicationInfo.apiVersion = VK_API_VERSION_1_3;
 
+    const std::vector<const char *> validationLayers = {"VK_LAYER_KHRONOS_validation"};
+
     vk::InstanceCreateInfo instanceCreateInfo{};
     instanceCreateInfo.sType = vk::StructureType::eInstanceCreateInfo;
     instanceCreateInfo.pApplicationInfo = &applicationInfo;
+    instanceCreateInfo.enabledLayerCount = static_cast<uint32_t>(validationLayers.size());
+    instanceCreateInfo.ppEnabledLayerNames = validationLayers.data();
 
     uint32_t glfwExtensionCount = 0;
-    const char** glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
+    const char **glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
 
     std::vector instanceExtensions(glfwExtensions, glfwExtensions + glfwExtensionCount);
 
@@ -23,15 +29,29 @@ RenderContext::RenderContext(GLFWwindow* window, const std::string &appName) {
     instanceExtensions.emplace_back(vk::KHRPortabilityEnumerationExtensionName);
 #endif
 
+    instanceExtensions.emplace_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+
     instanceCreateInfo.flags |= vk::InstanceCreateFlagBits::eEnumeratePortabilityKHR;
     instanceCreateInfo.enabledExtensionCount = static_cast<uint32_t>(instanceExtensions.size());
     instanceCreateInfo.ppEnabledExtensionNames = instanceExtensions.data();
 
     try {
         instance.emplace(*context, instanceCreateInfo);
-    } catch (vk::SystemError & error) {
-        throw std::runtime_error("failed to create instance!");
+    } catch (vk::SystemError &error) {
+        throw std::runtime_error(std::format("failed to create instance: {}", error.what()));
     }
+
+    vk::DebugUtilsMessengerCreateInfoEXT debugCreateInfo(
+            {}, vk::DebugUtilsMessageSeverityFlagBitsEXT::eWarning | vk::DebugUtilsMessageSeverityFlagBitsEXT::eError,
+            vk::DebugUtilsMessageTypeFlagBitsEXT::eGeneral | vk::DebugUtilsMessageTypeFlagBitsEXT::eValidation |
+                    vk::DebugUtilsMessageTypeFlagBitsEXT::ePerformance,
+            [](VkDebugUtilsMessageSeverityFlagBitsEXT, VkDebugUtilsMessageTypeFlagsEXT,
+               const VkDebugUtilsMessengerCallbackDataEXT *pCallbackData, void *) -> VkBool32 {
+                std::cerr << "[Vulkan Validation] " << pCallbackData->pMessage << std::endl;
+                return VK_FALSE;
+            });
+
+    debugMessenger = vk::raii::DebugUtilsMessengerEXT(*instance, debugCreateInfo);
 
     VkSurfaceKHR rawSurface;
     if (glfwCreateWindowSurface(**instance, window, nullptr, &rawSurface) != VK_SUCCESS) {
@@ -40,10 +60,9 @@ RenderContext::RenderContext(GLFWwindow* window, const std::string &appName) {
 
     surface.emplace(*instance, rawSurface);
 
-    std::vector deviceExtensions = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
+    std::vector deviceExtensions = {VK_KHR_SWAPCHAIN_EXTENSION_NAME, "VK_KHR_portability_subset", "VK_KHR_shader_draw_parameters"};
 
-    for (auto &device : instance->enumeratePhysicalDevices())
-    {
+    for (auto &device: instance->enumeratePhysicalDevices()) {
         auto props = device.getQueueFamilyProperties();
         auto supportedExtensions = device.enumerateDeviceExtensionProperties();
 
@@ -55,10 +74,8 @@ RenderContext::RenderContext(GLFWwindow* window, const std::string &appName) {
         if (!allSupported)
             continue;
 
-        for (uint32_t i = 0; i < props.size(); ++i)
-        {
-            if (props[i].queueFlags & vk::QueueFlagBits::eGraphics && device.getSurfaceSupportKHR(i, *surface))
-            {
+        for (uint32_t i = 0; i < props.size(); ++i) {
+            if (props[i].queueFlags & vk::QueueFlagBits::eGraphics && device.getSurfaceSupportKHR(i, *surface)) {
                 physicalDevice.emplace(std::move(device));
                 graphicsQueueFamily = i;
                 goto found;
@@ -66,25 +83,61 @@ RenderContext::RenderContext(GLFWwindow* window, const std::string &appName) {
         }
     }
     exit(-1);
-    found:
+found:
     auto priority = 1.0f;
     vk::DeviceQueueCreateInfo queueInfo{{}, graphicsQueueFamily, 1, &priority};
     vk::DeviceCreateInfo deviceInfo{
             {}, 1, &queueInfo, 0, nullptr, static_cast<uint32_t>(deviceExtensions.size()), deviceExtensions.data()};
-    try
-    {
+    try {
         device.emplace(*physicalDevice, deviceInfo);
+    } catch (const vk::SystemError &error) {
+        throw std::runtime_error(std::format("failed to create device: {}", error.what()));
     }
-    catch (const vk::SystemError &error)
-    {
-        throw std::runtime_error(error);
-    }
-    try
-    {
+    try {
         graphicsQueue.emplace(device->getQueue(graphicsQueueFamily, 0));
+    } catch (const vk::SystemError &error) {
+        throw std::runtime_error(std::format("failed to get graphics queue: {}", error.what()));
     }
-    catch (const vk::SystemError &error)
-    {
-        throw std::runtime_error("failed to create graphics queue!");
+
+    vk::SwapchainCreateInfoKHR swapchainCreateInfo{};
+    swapchainCreateInfo.surface = *surface;
+    swapchainCreateInfo.minImageCount = 2;
+    swapchainCreateInfo.imageColorSpace = vk::ColorSpaceKHR::eSrgbNonlinear;
+    swapchainCreateInfo.imageFormat = vk::Format::eB8G8R8A8Srgb;
+    swapchainCreateInfo.imageExtent = vk::Extent2D{800, 600};
+    swapchainCreateInfo.imageArrayLayers = 1;
+    swapchainCreateInfo.imageUsage = vk::ImageUsageFlagBits::eColorAttachment;
+    swapchainCreateInfo.imageSharingMode = vk::SharingMode::eExclusive;
+    swapchainCreateInfo.preTransform = vk::SurfaceTransformFlagBitsKHR::eIdentity;
+    swapchainCreateInfo.compositeAlpha = vk::CompositeAlphaFlagBitsKHR::eOpaque;
+    swapchainCreateInfo.presentMode = vk::PresentModeKHR::eFifo;
+    swapchainCreateInfo.clipped = VK_TRUE;
+    swapchainCreateInfo.oldSwapchain = nullptr;
+
+    swapchain = vk::raii::SwapchainKHR{*device, swapchainCreateInfo};
+
+    swapchainImages = swapchain->getImages();
+
+    std::vector<vk::ImageView> imageViews;
+    imageViews.reserve(swapchainImages.size());
+    vk::ImageViewCreateInfo imageViewCreateInfo{};
+    imageViewCreateInfo.sType = vk::StructureType::eImageViewCreateInfo;
+    imageViewCreateInfo.viewType = vk::ImageViewType::e2D;
+    imageViewCreateInfo.format = vk::Format::eB8G8R8A8Srgb;
+    imageViewCreateInfo.components.r = vk::ComponentSwizzle::eIdentity;
+    imageViewCreateInfo.components.g = vk::ComponentSwizzle::eIdentity;
+    imageViewCreateInfo.components.b = vk::ComponentSwizzle::eIdentity;
+    imageViewCreateInfo.components.a = vk::ComponentSwizzle::eIdentity;
+    imageViewCreateInfo.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eColor;
+    imageViewCreateInfo.subresourceRange.baseMipLevel = 0;
+    imageViewCreateInfo.subresourceRange.levelCount = 1;
+    imageViewCreateInfo.subresourceRange.baseArrayLayer = 0;
+    imageViewCreateInfo.subresourceRange.layerCount = 1;
+
+    for (auto image: swapchainImages) {
+        imageViewCreateInfo.image = image;
+        imageViews.push_back(device->createImageView(imageViewCreateInfo));
     }
+
+    swapchainImageViews = imageViews;
 }
