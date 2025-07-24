@@ -13,7 +13,7 @@ public:
     vk::raii::PhysicalDevice physicalDevice = nullptr;
     std::optional<vk::raii::su::SurfaceData> surfaceData;
     vk::raii::Device device = nullptr;
-    // std::optional<vk::raii::su::SwapChainData> swapChainData;
+    std::optional<vk::raii::su::SwapChainData> swapChainData;
     vk::raii::CommandPool commandPool = nullptr;
 
     uint32_t graphicsQueueFamilyIndex;
@@ -23,7 +23,6 @@ public:
     vk::raii::Queue presentQueue = nullptr;
 
     vk::raii::PipelineCache pipelineCache = nullptr;
-    vk::raii::DescriptorPool descriptorPool = nullptr;
 
     explicit RenderContext(GLFWwindow *window);
 };

@@ -344,4 +344,29 @@ namespace vk::raii::su {
                                                                 maxSets, poolSizes);
         return DescriptorPool(device, descriptorPoolCreateInfo);
     }
+
+    inline RenderPass makeRenderPass(Device const &device, Format colorFormat, Format depthFormat,
+
+                              AttachmentLoadOp loadOp = AttachmentLoadOp::eClear,
+                              ImageLayout colorFinalLayout = ImageLayout::ePresentSrcKHR) {
+        std::vector<AttachmentDescription> attachmentDescriptions;
+        assert(colorFormat != vk::Format::eUndefined);
+        attachmentDescriptions.emplace_back(AttachmentDescriptionFlags(), colorFormat, SampleCountFlagBits::e1, loadOp,
+                                            AttachmentStoreOp::eStore, AttachmentLoadOp::eDontCare,
+                                            AttachmentStoreOp::eDontCare, ImageLayout::eUndefined, colorFinalLayout);
+        if (depthFormat != Format::eUndefined) {
+            attachmentDescriptions.emplace_back(AttachmentDescriptionFlags(), depthFormat, SampleCountFlagBits::e1,
+                                                loadOp, AttachmentStoreOp::eDontCare, AttachmentLoadOp::eDontCare,
+                                                AttachmentStoreOp::eDontCare, ImageLayout::eUndefined,
+                                                ImageLayout::eDepthStencilAttachmentOptimal);
+        }
+        AttachmentReference colorAttachment(0, ImageLayout::eColorAttachmentOptimal);
+        constexpr AttachmentReference depthAttachment(1, ImageLayout::eDepthStencilAttachmentOptimal);
+        SubpassDescription subpassDescription(SubpassDescriptionFlags(), PipelineBindPoint::eGraphics, {},
+                                              colorAttachment, {},
+                                              depthFormat != Format::eUndefined ? &depthAttachment : nullptr);
+        const RenderPassCreateInfo renderPassCreateInfo(RenderPassCreateFlags(), attachmentDescriptions,
+                                                        subpassDescription);
+        return RenderPass(device, renderPassCreateInfo);
+    }
 } // namespace vk::raii::su

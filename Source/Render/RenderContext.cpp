@@ -21,20 +21,18 @@ RenderContext::RenderContext(GLFWwindow *window) {
     graphicsQueueFamilyIndex = graphics;
     presentQueueFamilyIndex = present;
     device = vk::raii::su::makeDevice(physicalDevice, graphics, vk::su::getDeviceExtensions());
-    commandPool = vk::raii::CommandPool(device, {{}, graphics});
+    commandPool = vk::raii::CommandPool(device, {vk::CommandPoolCreateFlagBits::eResetCommandBuffer, graphics});
 
     graphicsQueue = {device, graphics, 0};
     presentQueue = {device, present, 0};
 
-    // swapChainData = {physicalDevice,
-    //                  device,
-    //                  surfaceData->surface,
-    //                  surfaceData->extent,
-    //                  vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eTransferSrc,
-    //                  {},
-    //                  graphics,
-    //                  present};
+    swapChainData = {physicalDevice,
+                     device,
+                     surfaceData->surface,
+                     surfaceData->extent,
+                     vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eTransferSrc,
+                     {},
+                     graphics,
+                     present};
     pipelineCache = {device, vk::PipelineCacheCreateInfo{}};
-    descriptorPool = vk::raii::su::makeDescriptorPool(device, {{vk::DescriptorType::eCombinedImageSampler, IMGUI_IMPL_VULKAN_MINIMUM_IMAGE_SAMPLER_POOL_SIZE}});
-
 }
