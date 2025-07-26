@@ -4,20 +4,26 @@
 
 void MarchingCube::generateDensitySphere(const glm::vec3 center, const float radius, const float density) {
     FOREACH_VOXEL(x, y, z) {
-        auto position = glm::vec3{x, y, z};
+        auto position = glm::vec3{x, y, z} * voxelScale;
         if (const auto distance = glm::distance(center, position); distance < radius) {
             voxelGrid[x][y][z].density = density * (1.0f - distance / radius);
         }
     }
 }
 
-Triangles MarchingCube::polygonize() {
+Triangles MarchingCube::polygonize() const {
     Triangles result;
     uint32_t indexOffset = 0;
 
-    FOREACH_VOXEL(x, y, z) {
-        const glm::vec3 cubePos[8] = {{x, y, z},     {x + 1, y, z},     {x + 1, y, z + 1},     {x, y, z + 1},
-                                      {x, y + 1, z}, {x + 1, y + 1, z}, {x + 1, y + 1, z + 1}, {x, y + 1, z + 1}};
+    FOREACH_VOXEL_1(x, y, z) {
+        const glm::vec3 basePos = glm::vec3(x, y, z) * voxelScale;
+
+        const glm::vec3 cubePos[8] = {
+                basePos + glm::vec3(0, 0, 0) * voxelScale, basePos + glm::vec3(1, 0, 0) * voxelScale,
+                basePos + glm::vec3(1, 0, 1) * voxelScale, basePos + glm::vec3(0, 0, 1) * voxelScale,
+                basePos + glm::vec3(0, 1, 0) * voxelScale, basePos + glm::vec3(1, 1, 0) * voxelScale,
+                basePos + glm::vec3(1, 1, 1) * voxelScale, basePos + glm::vec3(0, 1, 1) * voxelScale,
+        };
 
         const float cubeVal[8] = {voxelGrid[x][y][z].density,
                                   voxelGrid[x + 1][y][z].density,
@@ -97,6 +103,6 @@ glm::vec3 MarchingCube::interpolateVertex(const float iso, const glm::vec3 p1, c
     return glm::mix(p1, p2, t);
 }
 
-glm::vec2 MarchingCube::generateUV(const glm::vec3 &pos, const float uvScale = 1.0f) {
+glm::vec2 MarchingCube::generateUV(const glm::vec3 &pos, const float uvScale) {
     return glm::vec2(pos.x, pos.z) * uvScale;
 }

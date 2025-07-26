@@ -8,11 +8,7 @@ Camera::Camera(GLFWwindow* win) : window(win) {
     updateCameraVectors();
 }
 
-void Camera::update() {
-    const auto currentFrame = static_cast<float>(glfwGetTime());
-    deltaTime = currentFrame - lastFrame;
-    lastFrame = currentFrame;
-
+void Camera::update(const float deltaTime) {
     processKeyboard(deltaTime);
     processMouse();
 }

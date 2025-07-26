@@ -4,8 +4,6 @@
 
 #include <glm/gtc/matrix_transform.hpp>
 
-#include "Vertex.h"
-
 void Renderer::beginFrame() {
     ImGui_ImplVulkan_NewFrame();
     ImGui_ImplGlfw_NewFrame();
@@ -70,7 +68,7 @@ void Renderer::renderScene(const RenderSettings &renderSettings) const {
 
     cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, *forwardPipelineLayout, 0, *forwardDescriptorSet, nullptr);
 
-    cmd.drawIndexed(static_cast<uint32_t>(cubeIndices.size()), 1, 0, 0, 0);
+    cmd.drawIndexed(indexBuffer->count(sizeof(uint32_t)), 1, 0, 0, 0);
 
     cmd.endRenderPass();
     cmd.end();
@@ -115,7 +113,17 @@ void Renderer::endFrame() {
     currentImageIndex = (currentImageIndex + 1) % imageAvailableSemaphores.size();
 }
 
-void Renderer::cameraUpdate() { camera.update(); }
+void Renderer::cameraUpdate(const float deltaTime) { camera.update(deltaTime); }
+
+void Renderer::updateBuffers(const std::vector<Vertex> &vertices, const std::vector<uint16_t> &indices) {
+    const auto &pd = renderContext.physicalDevice;
+    const auto &dev = renderContext.device;
+    const auto &cmdPool = renderContext.commandPool;
+    const auto &queue = renderContext.graphicsQueue;
+
+    vertexBuffer->upload(pd, dev, cmdPool, queue, vertices, sizeof(Vertex));
+    indexBuffer->upload(pd, dev,cmdPool, queue, indices, sizeof(uint16_t));
+}
 
 void Renderer::initRenderPasses() {
     const vk::Format colorFormat = vk::su::pickSurfaceFormat(renderContext.physicalDevice.getSurfaceFormatsKHR(
@@ -254,22 +262,16 @@ void Renderer::initImGui(GLFWwindow *window) const {
 void Renderer::initBuffers() {
     const auto &pd = renderContext.physicalDevice;
     const auto &dev = renderContext.device;
-    const auto &cmdPool = renderContext.commandPool;
-    const auto &queue = renderContext.graphicsQueue;
 
-    // vertexBuffer =
-    //         vk::raii::su::BufferData(pd, dev, sizeof(Vertex) * cubeVertices.size(),
-    //                                  vk::BufferUsageFlagBits::eVertexBuffer | vk::BufferUsageFlagBits::eTransferDst,
-    //                                  vk::MemoryPropertyFlagBits::eDeviceLocal);
-    //
-    // vertexBuffer->upload(pd, dev, cmdPool, queue, cubeVertices, sizeof(Vertex));
-    //
-    // indexBuffer =
-    //         vk::raii::su::BufferData(pd, dev, sizeof(uint16_t) * cubeIndices.size(),
-    //                                  vk::BufferUsageFlagBits::eIndexBuffer | vk::BufferUsageFlagBits::eTransferDst,
-    //                                  vk::MemoryPropertyFlagBits::eDeviceLocal);
-    //
-    // indexBuffer->upload(pd, dev, cmdPool, queue, cubeIndices, sizeof(uint16_t));
+    vertexBuffer =
+            vk::raii::su::BufferData(pd, dev, sizeof(Vertex) * 50,
+                                     vk::BufferUsageFlagBits::eVertexBuffer | vk::BufferUsageFlagBits::eTransferDst,
+                                     vk::MemoryPropertyFlagBits::eDeviceLocal);
+
+    indexBuffer =
+            vk::raii::su::BufferData(pd, dev, sizeof(uint16_t) * 3 * 50,
+                                     vk::BufferUsageFlagBits::eIndexBuffer | vk::BufferUsageFlagBits::eTransferDst,
+                                     vk::MemoryPropertyFlagBits::eDeviceLocal);
 
     uniformBuffer = vk::raii::su::BufferData(renderContext.physicalDevice, renderContext.device,
                                              sizeof(UniformBufferObject), vk::BufferUsageFlagBits::eUniformBuffer,

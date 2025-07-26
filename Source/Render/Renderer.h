@@ -8,6 +8,7 @@
 
 #include "Camera.h"
 #include "RenderSettings.h"
+#include "Vertex.h"
 
 class Renderer {
     RenderContext renderContext;
@@ -90,7 +91,9 @@ public:
 
     void endFrame();
 
-    void cameraUpdate();
+    void cameraUpdate(float deltaTime);
+
+    void updateBuffers(const std::vector<Vertex> &vertices, const std::vector<uint16_t> &indices);
 
 private:
     void initRenderPasses();

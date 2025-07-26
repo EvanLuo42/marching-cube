@@ -566,7 +566,7 @@ namespace vk::raii::su {
 
         template<typename DataType>
         void upload(PhysicalDevice const &physicalDevice, Device const &device, CommandPool const &commandPool,
-                    Queue const &queue, std::vector<DataType> const &data, const size_t stride) const {
+                    Queue const &queue, std::vector<DataType> const &data, const size_t stride) {
             assert(m_usage & vk::BufferUsageFlagBits::eTransferDst);
             assert(m_propertyFlags & vk::MemoryPropertyFlagBits::eDeviceLocal);
 
@@ -574,7 +574,7 @@ namespace vk::raii::su {
             assert(sizeof(DataType) <= elementSize);
 
             const size_t dataSize = data.size() * elementSize;
-            assert(dataSize <= m_size);
+            resizeIfNeeded(physicalDevice, device, dataSize, m_usage, m_propertyFlags);
 
             BufferData stagingBuffer(physicalDevice, device, dataSize, BufferUsageFlagBits::eTransferSrc);
             copyToDevice(stagingBuffer.deviceMemory, data.data(), data.size(), elementSize);
@@ -582,6 +582,30 @@ namespace vk::raii::su {
             su::oneTimeSubmit(device, commandPool, queue, [&](CommandBuffer const &commandBuffer) {
                 commandBuffer.copyBuffer(*stagingBuffer.buffer, *this->buffer, BufferCopy(0, 0, dataSize));
             });
+        }
+
+        [[nodiscard]] size_t count(const uint32_t typeSize) const {
+            return m_size / typeSize;
+        }
+
+        void resizeIfNeeded(PhysicalDevice const &physicalDevice, Device const &device, const DeviceSize requiredSize,
+                            const BufferUsageFlags usage, const MemoryPropertyFlags propertyFlags) {
+            if (requiredSize <= m_size)
+                return;
+
+            this->deviceMemory = nullptr;
+            this->buffer = nullptr;
+
+            this->buffer = Buffer(device, BufferCreateInfo({}, requiredSize, usage));
+            this->deviceMemory = allocateDeviceMemory(device, physicalDevice, buffer.getMemoryRequirements(), propertyFlags);
+            buffer.bindMemory(deviceMemory, 0);
+
+#if !defined(NDEBUG)
+            m_size = requiredSize;
+            m_usage = usage;
+            m_propertyFlags = propertyFlags;
+
+#endif
         }
 
         // the DeviceMemory should be destroyed before the Buffer it is bound to; to get that order with the standard

@@ -25,7 +25,7 @@ public:
 
     explicit Camera(GLFWwindow* win);
 
-    void update();
+    void update(float deltaTime);
     [[nodiscard]] glm::mat4 getViewMatrix() const;
 
 private:
