@@ -23,11 +23,24 @@ class Renderer {
 
     vk::raii::DescriptorPool uiDescriptorPool = nullptr;
     vk::raii::DescriptorPool forwardDescriptorPool = nullptr;
+    vk::raii::DescriptorSetLayout forwardDescriptorSetLayout = nullptr;
+
+    vk::raii::PipelineCache pipelineCache = nullptr;
+    vk::raii::PipelineLayout forwardPipelineLayout = nullptr;
+    vk::raii::Pipeline forwardPipeline = nullptr;
+
+    vk::raii::Image forwardDepthImage = nullptr;
+    vk::raii::DeviceMemory forwardDepthMemory = nullptr;
+    vk::raii::ImageView forwardDepthImageView = nullptr;
 
     std::vector<vk::raii::CommandBuffer> uiCommandBuffers;
+    std::vector<vk::raii::CommandBuffer> forwardCommandBuffers;
 
-    std::vector<vk::raii::Framebuffer> uiFramebuffers;
+    std::vector<vk::raii::Framebuffer> forwardFrameBuffers;
+    std::vector<vk::raii::Framebuffer> uiFrameBuffers;
+
     std::vector<vk::raii::Semaphore> imageAvailableSemaphores;
+    std::vector<vk::raii::Semaphore> forwardFinishedSemaphores;
     std::vector<vk::raii::Semaphore> renderFinishedSemaphores;
     std::vector<vk::raii::Fence> inFlightFences;
 
@@ -36,17 +49,10 @@ class Renderer {
 
     vk::Extent2D swapchainExtent;
     uint32_t currentImageIndex = 0;
+
 public:
     explicit Renderer(GLFWwindow *window) : renderContext{window} {
         shaderManager.compile();
-
-        uiCommandBuffers = renderContext.device.allocateCommandBuffers(
-            vk::CommandBufferAllocateInfo{
-                renderContext.commandPool,
-                vk::CommandBufferLevel::ePrimary,
-                static_cast<uint32_t>(renderContext.swapChainData->swapChain.getImages().size())
-            }
-        );
 
         ImGui::CreateContext();
         ImGuiIO &io = ImGui::GetIO();
@@ -54,27 +60,19 @@ public:
         io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
         io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;
 
-        initRenderPasses();
+        swapchainExtent = renderContext.surfaceData.value().extent;
+
+        initDepthResources();
         initDescriptorPools();
+        initRenderPasses();
+        initPipelineLayout();
+        initRenderPipelines();
 
         initFrameBuffers();
+        initSemaphoresAndFences();
+        initCommandBuffers();
 
-        ImGui_ImplGlfw_InitForVulkan(window, true);
-        ImGui_ImplVulkan_InitInfo initInfo;
-        initInfo.Instance = *renderContext.instance;
-        initInfo.PhysicalDevice = *renderContext.physicalDevice;
-        initInfo.Device = *renderContext.device;
-        initInfo.QueueFamily = renderContext.graphicsQueueFamilyIndex;
-        initInfo.Queue = *renderContext.graphicsQueue;
-        initInfo.PipelineCache = *renderContext.pipelineCache;
-        initInfo.DescriptorPool = *uiDescriptorPool;
-        initInfo.RenderPass = *uiRenderPass;
-        initInfo.Subpass = 0;
-        initInfo.MinImageCount = 2;
-        initInfo.ImageCount = renderContext.swapChainData.value().swapChain.getImages().size();
-        initInfo.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
-        initInfo.CheckVkResultFn = checkVkResult;
-        ImGui_ImplVulkan_Init(&initInfo);
+        initImGui(window);
     }
 
     ~Renderer() {
@@ -95,4 +93,10 @@ private:
     void initRenderPasses();
     void initDescriptorPools();
     void initFrameBuffers();
+    void initDepthResources();
+    void initCommandBuffers();
+    void initSemaphoresAndFences();
+    void initPipelineLayout();
+    void initRenderPipelines();
+    void initImGui(GLFWwindow* window) const;
 };

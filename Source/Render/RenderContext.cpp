@@ -17,7 +17,8 @@ RenderContext::RenderContext(GLFWwindow *window) {
     glfwGetWindowSize(window, &width, &height);
     auto extent = vk::Extent2D{static_cast<unsigned int>(width), static_cast<unsigned int>(height)};
     surfaceData = {instance, extent, window};
-    auto [graphics, present] = vk::raii::su::findGraphicsAndPresentQueueFamilyIndex(physicalDevice, surfaceData->surface);
+    auto [graphics, present] =
+            vk::raii::su::findGraphicsAndPresentQueueFamilyIndex(physicalDevice, surfaceData->surface);
     graphicsQueueFamilyIndex = graphics;
     presentQueueFamilyIndex = present;
     device = vk::raii::su::makeDevice(physicalDevice, graphics, vk::su::getDeviceExtensions());

@@ -19,6 +19,7 @@ int main() {
 
         ImGui::ShowDemoWindow();
 
+        renderer.renderScene();
         renderer.renderUI();
         renderer.endFrame();
     }

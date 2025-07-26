@@ -14,7 +14,7 @@ void ShaderManager::compile() {
 
     slang::TargetDesc targetDesc = {};
     targetDesc.format = SLANG_SPIRV;
-    targetDesc.profile = globalSession->findProfile("spirv_1_5");
+    targetDesc.profile = globalSession->findProfile("spirv_1_3");
     targetDesc.flags = 0;
 
     std::vector<slang::TargetDesc> targets{};

@@ -209,6 +209,19 @@ namespace vk::su {
         return v < lo ? lo : hi < v ? hi : v;
     }
 
+    inline uint32_t findMemoryType(const PhysicalDevice physicalDevice, const uint32_t typeFilter,
+                                   const MemoryPropertyFlags properties) {
+        const PhysicalDeviceMemoryProperties memProperties = physicalDevice.getMemoryProperties();
+
+        for (uint32_t i = 0; i < memProperties.memoryTypeCount; ++i) {
+            if (typeFilter & 1 << i && (memProperties.memoryTypes[i].propertyFlags & properties) == properties) {
+                return i;
+            }
+        }
+
+        throw std::runtime_error("Failed to find suitable memory type!");
+    }
+
     PresentModeKHR pickPresentMode(std::vector<PresentModeKHR> const &presentModes);
 } // namespace vk::su
 
@@ -289,7 +302,7 @@ namespace vk::raii::su {
 
     Instance makeInstance(const Context &context, const std::string &appName, const std::string &engineName,
                           const std::vector<std::string> &layers = {}, const std::vector<std::string> &extensions = {},
-                          uint32_t apiVersion = VK_API_VERSION_1_0);
+                          uint32_t apiVersion = VK_API_VERSION_1_3);
 
     inline std::pair<uint32_t, uint32_t> findGraphicsAndPresentQueueFamilyIndex(PhysicalDevice const &physicalDevice,
                                                                                 SurfaceKHR const &surface) {
@@ -347,14 +360,15 @@ namespace vk::raii::su {
     }
 
     inline RenderPass makeRenderPass(Device const &device, Format colorFormat, Format depthFormat,
-
-                              AttachmentLoadOp loadOp = AttachmentLoadOp::eClear,
-                              ImageLayout colorFinalLayout = ImageLayout::ePresentSrcKHR) {
+                                     AttachmentLoadOp loadOp = AttachmentLoadOp::eClear,
+                                     ImageLayout colorInitialLayout = ImageLayout::eUndefined,
+                                     ImageLayout colorFinalLayout = ImageLayout::ePresentSrcKHR) {
         std::vector<AttachmentDescription> attachmentDescriptions;
         assert(colorFormat != vk::Format::eUndefined);
+
         attachmentDescriptions.emplace_back(AttachmentDescriptionFlags(), colorFormat, SampleCountFlagBits::e1, loadOp,
                                             AttachmentStoreOp::eStore, AttachmentLoadOp::eDontCare,
-                                            AttachmentStoreOp::eDontCare, ImageLayout::eUndefined, colorFinalLayout);
+                                            AttachmentStoreOp::eDontCare, colorInitialLayout, colorFinalLayout);
         if (depthFormat != Format::eUndefined) {
             attachmentDescriptions.emplace_back(AttachmentDescriptionFlags(), depthFormat, SampleCountFlagBits::e1,
                                                 loadOp, AttachmentStoreOp::eDontCare, AttachmentLoadOp::eDontCare,
@@ -369,5 +383,141 @@ namespace vk::raii::su {
         const RenderPassCreateInfo renderPassCreateInfo(RenderPassCreateFlags(), attachmentDescriptions,
                                                         subpassDescription);
         return RenderPass(device, renderPassCreateInfo);
+    }
+
+    struct VertexAttributeInfo {
+        uint32_t location;
+        uint32_t binding;
+        Format format;
+        uint32_t offset;
+    };
+
+    inline vk::raii::Pipeline makeGraphicsPipeline(
+    const vk::raii::Device& device,
+    const vk::raii::PipelineCache& pipelineCache,
+    const vk::raii::ShaderModule& vertexShaderModule,
+    const vk::raii::ShaderModule& fragmentShaderModule,
+    const uint32_t vertexStride,
+    const std::vector<VertexAttributeInfo>& vertexAttributes,
+    const vk::raii::PipelineLayout& pipelineLayout,
+    const vk::RenderPass& renderPass,
+    bool enableDepth,
+    vk::FrontFace frontFace = vk::FrontFace::eCounterClockwise
+) {
+    // Shader stages
+    std::array<vk::PipelineShaderStageCreateInfo, 2> shaderStages = {
+        vk::PipelineShaderStageCreateInfo{
+            {}, vk::ShaderStageFlagBits::eVertex, *vertexShaderModule, "main"
+        },
+        vk::PipelineShaderStageCreateInfo{
+            {}, vk::ShaderStageFlagBits::eFragment, *fragmentShaderModule, "main"
+        }
+    };
+
+    // Vertex input layout
+    vk::VertexInputBindingDescription bindingDesc{
+        0, vertexStride, vk::VertexInputRate::eVertex
+    };
+
+    std::vector<vk::VertexInputAttributeDescription> attributeDescs;
+    attributeDescs.reserve(vertexAttributes.size());
+    for (const auto& attr : vertexAttributes) {
+        attributeDescs.emplace_back(attr.location, attr.binding, attr.format, attr.offset);
+    }
+
+    vk::PipelineVertexInputStateCreateInfo vertexInputInfo{
+        {}, 1, &bindingDesc,
+        static_cast<uint32_t>(attributeDescs.size()), attributeDescs.data()
+    };
+
+    // Input assembly
+    vk::PipelineInputAssemblyStateCreateInfo inputAssembly{
+        {}, vk::PrimitiveTopology::eTriangleList, VK_FALSE
+    };
+
+    // Viewport & scissor (dynamic)
+    vk::PipelineViewportStateCreateInfo viewportState{
+        {}, 1, nullptr, 1, nullptr
+    };
+
+    // Rasterization
+    vk::PipelineRasterizationStateCreateInfo rasterizer{
+        {}, false, false,
+        vk::PolygonMode::eFill,
+        vk::CullModeFlagBits::eBack,
+        frontFace,
+        false, 0.f, 0.f, 0.f, 1.f
+    };
+
+    // Multisampling
+    vk::PipelineMultisampleStateCreateInfo multisampling{
+        {}, vk::SampleCountFlagBits::e1
+    };
+
+    // Depth stencil
+    vk::PipelineDepthStencilStateCreateInfo depthStencil{};
+    if (enableDepth) {
+        depthStencil = {
+            {}, true, true,
+            vk::CompareOp::eLessOrEqual,
+            false, false
+        };
+    }
+
+    // Color blending
+    vk::PipelineColorBlendAttachmentState colorBlendAttachment{
+        false,
+        vk::BlendFactor::eZero, vk::BlendFactor::eZero, vk::BlendOp::eAdd,
+        vk::BlendFactor::eZero, vk::BlendFactor::eZero, vk::BlendOp::eAdd,
+        vk::ColorComponentFlagBits::eR |
+        vk::ColorComponentFlagBits::eG |
+        vk::ColorComponentFlagBits::eB |
+        vk::ColorComponentFlagBits::eA
+    };
+
+    vk::PipelineColorBlendStateCreateInfo colorBlending{
+        {}, false, vk::LogicOp::eNoOp,
+        1, &colorBlendAttachment
+    };
+
+    // Dynamic states
+    std::array<vk::DynamicState, 2> dynamicStates = {
+        vk::DynamicState::eViewport,
+        vk::DynamicState::eScissor
+    };
+    vk::PipelineDynamicStateCreateInfo dynamicState{
+        {}, dynamicStates
+    };
+
+    // Combine into pipeline
+    GraphicsPipelineCreateInfo pipelineInfo{
+        {}, static_cast<uint32_t>(shaderStages.size()), shaderStages.data(),
+        &vertexInputInfo,
+        &inputAssembly,
+        nullptr,
+        &viewportState,
+        &rasterizer,
+        &multisampling,
+        enableDepth ? &depthStencil : nullptr,
+        &colorBlending,
+        &dynamicState,
+        pipelineLayout,
+        renderPass
+    };
+
+    return vk::raii::Pipeline(device, pipelineCache, pipelineInfo);
+}
+
+    inline DescriptorSetLayout
+    makeDescriptorSetLayout(Device const &device,
+                            std::vector<std::tuple<DescriptorType, uint32_t, ShaderStageFlags>> const &bindingData,
+                            const DescriptorSetLayoutCreateFlags flags = {}) {
+        std::vector<DescriptorSetLayoutBinding> bindings(bindingData.size());
+        for (size_t i = 0; i < bindingData.size(); i++) {
+            bindings[i] = DescriptorSetLayoutBinding(static_cast<uint32_t>(i), std::get<0>(bindingData[i]),
+                                                     std::get<1>(bindingData[i]), std::get<2>(bindingData[i]));
+        }
+        const DescriptorSetLayoutCreateInfo descriptorSetLayoutCreateInfo(flags, bindings);
+        return DescriptorSetLayout(device, descriptorSetLayoutCreateInfo);
     }
 } // namespace vk::raii::su
