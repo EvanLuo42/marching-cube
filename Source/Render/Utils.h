@@ -13,6 +13,7 @@ namespace vk::su {
         const char **extensions = glfwGetRequiredInstanceExtensions(&extensionsCount);
         std::vector<std::string> requiredExtensions;
 
+        requiredExtensions.reserve(extensionsCount);
         for (uint32_t i = 0; i < extensionsCount; i++) {
             requiredExtensions.emplace_back(extensions[i]);
         }
@@ -244,15 +245,15 @@ namespace vk::raii::su {
                 swapchainExtent = surfaceCapabilities.currentExtent;
             }
             SurfaceTransformFlagBitsKHR preTransform =
-                    (surfaceCapabilities.supportedTransforms & SurfaceTransformFlagBitsKHR::eIdentity)
+                    surfaceCapabilities.supportedTransforms & SurfaceTransformFlagBitsKHR::eIdentity
                             ? SurfaceTransformFlagBitsKHR::eIdentity
                             : surfaceCapabilities.currentTransform;
             CompositeAlphaFlagBitsKHR compositeAlpha =
-                    (surfaceCapabilities.supportedCompositeAlpha & CompositeAlphaFlagBitsKHR::ePreMultiplied)
+                    surfaceCapabilities.supportedCompositeAlpha & CompositeAlphaFlagBitsKHR::ePreMultiplied
                             ? CompositeAlphaFlagBitsKHR::ePreMultiplied
-                    : (surfaceCapabilities.supportedCompositeAlpha & CompositeAlphaFlagBitsKHR::ePostMultiplied)
+                    : surfaceCapabilities.supportedCompositeAlpha & CompositeAlphaFlagBitsKHR::ePostMultiplied
                             ? CompositeAlphaFlagBitsKHR::ePostMultiplied
-                    : (surfaceCapabilities.supportedCompositeAlpha & CompositeAlphaFlagBitsKHR::eInherit)
+                    : surfaceCapabilities.supportedCompositeAlpha & CompositeAlphaFlagBitsKHR::eInherit
                             ? CompositeAlphaFlagBitsKHR::eInherit
                             : CompositeAlphaFlagBitsKHR::eOpaque;
             PresentModeKHR presentMode = vk::su::pickPresentMode(physicalDevice.getSurfacePresentModesKHR(surface));

@@ -12,21 +12,19 @@ void Renderer::renderUI() {
     ImGui::Render();
     ImDrawData* drawData = ImGui::GetDrawData();
 
-    renderContext.device.waitForFences(*inFlightFences[currentFrame], true, UINT64_MAX);
-    renderContext.device.resetFences(*inFlightFences[currentFrame]);
+    renderContext.device.waitForFences(*inFlightFences[currentImageIndex], true, UINT64_MAX);
+    renderContext.device.resetFences(*inFlightFences[currentImageIndex]);
 
-    auto [_, index] = renderContext.swapChainData->swapChain.acquireNextImage(INT_MAX, *imageAvailableSemaphores[currentFrame]);
+    auto [_, imageIndex] = renderContext.swapChainData->swapChain.acquireNextImage(INT_MAX, *imageAvailableSemaphores[currentImageIndex]);
 
-    currentImageIndex = index;
-
-    const vk::raii::CommandBuffer& cmd = uiCommandBuffers[currentImageIndex];
+    const vk::raii::CommandBuffer& cmd = uiCommandBuffers[imageIndex];
     cmd.reset();
     cmd.begin({vk::CommandBufferUsageFlagBits::eOneTimeSubmit});
 
     vk::ClearValue clearColor{std::array{0.1f, 0.1f, 0.1f, 1.0f}};
     const vk::RenderPassBeginInfo beginInfo = {
         *uiRenderPass,
-        *uiFramebuffers[currentImageIndex],
+        *uiFramebuffers[imageIndex],
         {{0, 0}, swapchainExtent},
         1,
         &clearColor
@@ -39,25 +37,26 @@ void Renderer::renderUI() {
 
     vk::PipelineStageFlags waitStage = vk::PipelineStageFlagBits::eColorAttachmentOutput;
     const vk::SubmitInfo submitInfo = {
-        *imageAvailableSemaphores[currentFrame],
+        *imageAvailableSemaphores[imageIndex],
         waitStage,
         *cmd,
-        *renderFinishedSemaphores[currentFrame]
+        *renderFinishedSemaphores[imageIndex]
     };
 
-    renderContext.graphicsQueue.submit(submitInfo, *inFlightFences[currentFrame]);
+    renderContext.graphicsQueue.submit(submitInfo, *inFlightFences[imageIndex]);
+    currentImageIndex = imageIndex;
 }
 
 void Renderer::endFrame() {
     const vk::PresentInfoKHR presentInfo = {
-        *renderFinishedSemaphores[currentFrame],
+        *renderFinishedSemaphores[currentImageIndex],
         *renderContext.swapChainData->swapChain,
         currentImageIndex
     };
 
     renderContext.presentQueue.presentKHR(presentInfo);
 
-    currentFrame = (currentFrame + 1) % maxFramesInFlight;
+    currentImageIndex = (currentImageIndex + 1) % imageAvailableSemaphores.size();
 }
 
 void Renderer::initRenderPasses() {
@@ -67,7 +66,7 @@ void Renderer::initRenderPasses() {
 
 void Renderer::initDescriptorPools() {
     uiDescriptorPool = vk::raii::su::makeDescriptorPool(renderContext.device, {
-        {vk::DescriptorType::eUniformBuffer, 1},
+        { vk::DescriptorType::eUniformBuffer, 1 },
         { vk::DescriptorType::eCombinedImageSampler, 1000 },
         { vk::DescriptorType::eSampler, 1000 },
         { vk::DescriptorType::eSampledImage, 1000 },
@@ -90,7 +89,12 @@ void Renderer::initFrameBuffers() {
         uiFramebuffers.emplace_back(renderContext.device, fbInfo);
     }
 
-    for (int i = 0; i < maxFramesInFlight; ++i) {
+    const size_t imageCount = renderContext.swapChainData->imageViews.size();
+    imageAvailableSemaphores.reserve(imageCount);
+    renderFinishedSemaphores.reserve(imageCount);
+    inFlightFences.reserve(imageCount);
+
+    for (size_t i = 0; i < imageCount; ++i) {
         imageAvailableSemaphores.emplace_back(renderContext.device, vk::SemaphoreCreateInfo{});
         renderFinishedSemaphores.emplace_back(renderContext.device, vk::SemaphoreCreateInfo{});
         inFlightFences.emplace_back(renderContext.device, vk::FenceCreateInfo{vk::FenceCreateFlagBits::eSignaled});

@@ -77,6 +77,12 @@ public:
         ImGui_ImplVulkan_Init(&initInfo);
     }
 
+    ~Renderer() {
+        ImGui_ImplVulkan_Shutdown();
+        ImGui_ImplGlfw_Shutdown();
+        ImGui::DestroyContext();
+    }
+
     void beginFrame();
 
     void renderScene();
