@@ -2,6 +2,7 @@
 
 #include "GLFW/glfw3.h"
 #include "glm/ext/matrix_transform.hpp"
+#include "imgui.h"
 
 Camera::Camera(GLFWwindow* win) : window(win) {
     updateCameraVectors();
@@ -21,6 +22,8 @@ glm::mat4 Camera::getViewMatrix() const {
 }
 
 void Camera::processKeyboard(const float dt) {
+    if (ImGui::GetIO().WantCaptureKeyboard) return;
+
     const float velocity = speed * dt;
 
     if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)

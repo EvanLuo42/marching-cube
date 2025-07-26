@@ -22,6 +22,8 @@ add_executable(marching_cube Source/main.cpp
         Source/Render/UniformBufferObject.h
         Source/Render/Camera.cpp
         Source/Render/Camera.h
+        Source/Render/BlinnPhongVariables.h
+        Source/Render/RenderSettings.h
 )
 
 target_include_directories(marching_cube PRIVATE

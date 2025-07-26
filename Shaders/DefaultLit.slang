@@ -21,6 +21,15 @@ cbuffer CameraBuffer : register(b0)
     float3 cameraPos;
 };
 
+struct BlinnPhongVariables
+{
+    float3 lightPos;
+    float shininess;
+};
+
+[[vk::push_constant]]
+BlinnPhongVariables blinnPhongVars;
+
 [shader("vertex")]
 VertexOutput vertexMain(VertexInput input)
 {
@@ -38,6 +47,26 @@ VertexOutput vertexMain(VertexInput input)
 [shader("fragment")]
 float4 fragmentMain(VertexOutput input) : SV_Target
 {
-    float3 lightColor = float3(1.0, 1.0, 1.0);
-    return float4(lightColor, 1.0);
+    float3 color = float3(1.0, 1.0, 1.0);
+
+    // Ambient
+    float3 ambient = 0.05 * color;
+
+    // Diffuse
+    float3 lightDir = normalize(blinnPhongVars.lightPos - input.worldPos);
+    float3 normal = normalize(input.normal);
+    float diff = max(dot(lightDir, normal), 0.0);
+    float3 diffuse = diff * color;
+
+    // Specular
+    float3 viewDir = normalize(cameraPos - input.worldPos);
+    float spec = 0.0;
+
+    float3 halfwayDir = normalize(lightDir + viewDir);
+    spec = pow(max(dot(normal, halfwayDir), 0.0), blinnPhongVars.shininess);
+
+    float3 specular = 0.3 * spec;
+
+    float3 result = ambient + diffuse + specular;
+    return float4(result, 1.0);
 }

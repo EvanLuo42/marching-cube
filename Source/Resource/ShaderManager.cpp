@@ -1,6 +1,13 @@
 #include "ShaderManager.h"
 #include <filesystem>
 
+static void printSlangDiagnostics(const Slang::ComPtr<slang::IBlob>& diagnosticsBlob) {
+    if (diagnosticsBlob) {
+        const char* msg = static_cast<const char*>(diagnosticsBlob->getBufferPointer());
+        std::printf("[Slang Error] %s\n", msg);
+    }
+}
+
 void ShaderManager::compile() {
     std::vector<std::string> files{};
     for (const auto &entry : std::filesystem::directory_iterator("../Shaders")) {
@@ -41,8 +48,10 @@ void ShaderManager::compile() {
         {
             Slang::ComPtr<slang::IBlob> diagnosticBlob;
             slangModule = session->loadModule(file.c_str(), diagnosticBlob.writeRef());
-            if (!slangModule)
-                throw std::runtime_error(std::format("Module {} not found", file));
+            if (!slangModule) {
+                printSlangDiagnostics(diagnosticBlob);
+                exit(-1);
+            }
         }
 
         Slang::ComPtr<slang::IEntryPoint> vertexEntry;
@@ -62,7 +71,8 @@ void ShaderManager::compile() {
                 composedProgram.writeRef(),
                 diagnosticsBlob.writeRef());
             if (SLANG_FAILED(result)) {
-                throw std::runtime_error("Failed to compose program");
+                printSlangDiagnostics(diagnosticsBlob);
+                exit(-1);
             }
         }
 
@@ -75,7 +85,8 @@ void ShaderManager::compile() {
                 vertSpirvCode.writeRef(),
                 diagnosticsBlob.writeRef());
             if (SLANG_FAILED(result)) {
-                throw std::runtime_error("Failed to get SPIRV code");
+                printSlangDiagnostics(diagnosticsBlob);
+                exit(-1);
             }
         }
 
@@ -88,7 +99,8 @@ void ShaderManager::compile() {
                 fragSpirvCode.writeRef(),
                 diagnosticsBlob.writeRef());
             if (SLANG_FAILED(result)) {
-                throw std::runtime_error("Failed to get SPIRV code");
+                printSlangDiagnostics(diagnosticsBlob);
+                exit(-1);
             }
         }
 

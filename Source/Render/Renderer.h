@@ -7,29 +7,23 @@
 #include <imgui.h>
 
 #include "Camera.h"
+#include "RenderSettings.h"
 #include "Vertex.h"
 
 const std::vector<Vertex> cubeVertices = {
-    // Front face
-    {{-0.5f, -0.5f,  0.5f}, {0, 0}, {0, 0, 1}},
-    {{ 0.5f, -0.5f,  0.5f}, {1, 0}, {0, 0, 1}},
-    {{ 0.5f,  0.5f,  0.5f}, {1, 1}, {0, 0, 1}},
-    {{-0.5f,  0.5f,  0.5f}, {0, 1}, {0, 0, 1}},
-
-    // Back face
-    {{-0.5f, -0.5f, -0.5f}, {1, 0}, {0, 0, -1}},
-    {{ 0.5f, -0.5f, -0.5f}, {0, 0}, {0, 0, -1}},
-    {{ 0.5f,  0.5f, -0.5f}, {0, 1}, {0, 0, -1}},
-    {{-0.5f,  0.5f, -0.5f}, {1, 1}, {0, 0, -1}},
+        {{-0.5f, 0.5f, -0.5f}, {0, 0}, {0, 1, 0}},
+        {{0.5f, 0.5f, -0.5f}, {1, 0}, {0, 1, 0}},
+        {{0.5f, 0.5f, 0.5f}, {1, 1}, {0, 1, 0}},
+        {{-0.5f, 0.5f, 0.5f}, {0, 1}, {0, 1, 0}},
 };
 
 const std::vector<uint16_t> cubeIndices = {
-    0, 1, 2, 2, 3, 0,       // front
-    4, 6, 5, 6, 4, 7,       // back
-    4, 5, 1, 1, 0, 4,       // bottom
-    3, 2, 6, 6, 7, 3,       // top
-    1, 5, 6, 6, 2, 1,       // right
-    4, 0, 3, 3, 7, 4        // left
+        0, 1, 2, 2, 3, 0, // front
+        4, 6, 5, 6, 4, 7, // back
+        4, 5, 1, 1, 0, 4, // bottom
+        3, 2, 6, 6, 7, 3, // top
+        1, 5, 6, 6, 2, 1, // right
+        4, 0, 3, 3, 7, 4 // left
 };
 
 class Renderer {
@@ -107,7 +101,7 @@ public:
 
     void beginFrame();
 
-    void renderScene() const;
+    void renderScene(const RenderSettings &renderSettings) const;
 
     void renderUI();
 
@@ -124,7 +118,7 @@ private:
     void initSemaphoresAndFences();
     void initPipelineLayout();
     void initRenderPipelines();
-    void initImGui(GLFWwindow* window) const;
+    void initImGui(GLFWwindow *window) const;
 
     void initBuffers();
 };

@@ -17,9 +17,9 @@ void Renderer::beginFrame() {
     currentImageIndex = imageIndex;
 }
 
-void Renderer::renderScene() const {
+void Renderer::renderScene(const RenderSettings &renderSettings) const {
     UniformBufferObject ubo{};
-    ubo.model = glm::identity<glm::mat4>();
+    ubo.model = glm::scale(glm::identity<glm::mat4>(), glm::vec3(5.0f, 0.5f, 5.0f));
     ubo.view = camera.getViewMatrix();
     const float aspect = static_cast<float>(swapchainExtent.width) /
                static_cast<float>(swapchainExtent.height);
@@ -33,6 +33,13 @@ void Renderer::renderScene() const {
     const vk::raii::CommandBuffer &cmd = forwardCommandBuffers[currentImageIndex];
     cmd.reset();
     cmd.begin({vk::CommandBufferUsageFlagBits::eOneTimeSubmit});
+
+    cmd.pushConstants(
+        forwardPipelineLayout,
+        vk::ShaderStageFlagBits::eFragment,
+        0,
+        vk::ArrayProxy<const BlinnPhongVariables>(1, &renderSettings.lighting)
+    );
 
     std::array<vk::ClearValue, 2> clearValues;
     clearValues[0].color = vk::ClearColorValue(0.0f, 0.0f, 0.0f, 1.0f);
@@ -183,8 +190,18 @@ void Renderer::initSemaphoresAndFences() {
 
 void Renderer::initPipelineLayout() {
     forwardDescriptorSetLayout = vk::raii::su::makeDescriptorSetLayout(
-            renderContext.device, {{vk::DescriptorType::eUniformBuffer, 1, vk::ShaderStageFlagBits::eVertex}});
-    forwardPipelineLayout = {renderContext.device, {{}, *forwardDescriptorSetLayout}};
+        renderContext.device,
+        {
+            {vk::DescriptorType::eUniformBuffer, 1, vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment}
+        }
+    );
+
+    vk::PushConstantRange blinnPhongRange{
+        vk::ShaderStageFlagBits::eFragment,
+        0,
+        sizeof(glm::vec3) + sizeof(float)
+    };
+    forwardPipelineLayout = {renderContext.device, {{}, *forwardDescriptorSetLayout, blinnPhongRange}};
 }
 
 void Renderer::initRenderPipelines() {
