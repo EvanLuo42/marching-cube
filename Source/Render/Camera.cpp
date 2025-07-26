@@ -4,7 +4,6 @@
 #include "glm/ext/matrix_transform.hpp"
 
 Camera::Camera(GLFWwindow* win) : window(win) {
-    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
     updateCameraVectors();
 }
 
@@ -39,17 +38,35 @@ void Camera::processKeyboard(const float dt) {
 }
 
 void Camera::processMouse() {
+    static bool rightMousePressedLastFrame = false;
+
+    if (const bool rightMousePressedNow = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT); !rightMousePressedNow) {
+        glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+        rightMousePressedLastFrame = false;
+        return;
+    }
+
+    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+
+    int width, height;
+    glfwGetWindowSize(window, &width, &height);
+    const double centerX = width / 2.0;
+    const double centerY = height / 2.0;
+
+    if (!rightMousePressedLastFrame) {
+        glfwSetCursorPos(window, centerX, centerY);
+        lastX = static_cast<float>(centerX);
+        lastY = static_cast<float>(centerY);
+        rightMousePressedLastFrame = true;
+        return;
+    }
+
     double xPos, yPos;
     glfwGetCursorPos(window, &xPos, &yPos);
 
-    if (firstMouse) {
-        lastX = static_cast<float>(xPos);
-        lastY = static_cast<float>(yPos);
-        firstMouse = false;
-    }
+    auto xOffset = static_cast<float>(xPos - lastX);
+    auto yOffset = static_cast<float>(lastY - yPos);
 
-    float xOffset = static_cast<float>(xPos) - lastX;
-    float yOffset = lastY - static_cast<float>(yPos);
     lastX = static_cast<float>(xPos);
     lastY = static_cast<float>(yPos);
 
@@ -62,6 +79,10 @@ void Camera::processMouse() {
     pitch = glm::clamp(pitch, -89.0f, 89.0f);
 
     updateCameraVectors();
+
+    glfwSetCursorPos(window, centerX, centerY);
+    lastX = static_cast<float>(centerX);
+    lastY = static_cast<float>(centerY);
 }
 
 void Camera::updateCameraVectors() {

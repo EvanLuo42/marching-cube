@@ -21,8 +21,12 @@ void Renderer::renderScene() const {
     UniformBufferObject ubo{};
     ubo.model = glm::identity<glm::mat4>();
     ubo.view = camera.getViewMatrix();
-    ubo.proj = glm::ortho(-1.0f, 1.0f, -1.0f, 1.0f, 0.1f, 100.0f);
+    const float aspect = static_cast<float>(swapchainExtent.width) /
+               static_cast<float>(swapchainExtent.height);
+
+    ubo.proj = glm::perspectiveRH_ZO(glm::radians(45.0f), aspect, 0.1f, 100.0f);
     ubo.proj[1][1] *= -1;
+    ubo.cameraPos = camera.position;
 
     uniformBuffer->upload(ubo);
 
