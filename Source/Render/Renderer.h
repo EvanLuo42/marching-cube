@@ -8,23 +8,6 @@
 
 #include "Camera.h"
 #include "RenderSettings.h"
-#include "Vertex.h"
-
-const std::vector<Vertex> cubeVertices = {
-        {{-0.5f, 0.5f, -0.5f}, {0, 0}, {0, 1, 0}},
-        {{0.5f, 0.5f, -0.5f}, {1, 0}, {0, 1, 0}},
-        {{0.5f, 0.5f, 0.5f}, {1, 1}, {0, 1, 0}},
-        {{-0.5f, 0.5f, 0.5f}, {0, 1}, {0, 1, 0}},
-};
-
-const std::vector<uint16_t> cubeIndices = {
-        0, 1, 2, 2, 3, 0, // front
-        4, 6, 5, 6, 4, 7, // back
-        4, 5, 1, 1, 0, 4, // bottom
-        3, 2, 6, 6, 7, 3, // top
-        1, 5, 6, 6, 2, 1, // right
-        4, 0, 3, 3, 7, 4 // left
-};
 
 class Renderer {
     RenderContext renderContext;

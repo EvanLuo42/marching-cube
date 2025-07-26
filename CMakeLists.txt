@@ -24,6 +24,13 @@ add_executable(marching_cube Source/main.cpp
         Source/Render/Camera.h
         Source/Render/BlinnPhongVariables.h
         Source/Render/RenderSettings.h
+        Source/Terrain/Voxel.h
+        Source/Terrain/MarchingCube.cpp
+        Source/Terrain/MarchingCube.h
+        Source/Terrain/TerrainEditor.cpp
+        Source/Terrain/TerrainEditor.h
+        Source/Terrain/MarchingTables.cpp
+        Source/Terrain/MarchingTables.h
 )
 
 target_include_directories(marching_cube PRIVATE

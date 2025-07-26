@@ -4,6 +4,8 @@
 
 #include <glm/gtc/matrix_transform.hpp>
 
+#include "Vertex.h"
+
 void Renderer::beginFrame() {
     ImGui_ImplVulkan_NewFrame();
     ImGui_ImplGlfw_NewFrame();
@@ -255,19 +257,19 @@ void Renderer::initBuffers() {
     const auto &cmdPool = renderContext.commandPool;
     const auto &queue = renderContext.graphicsQueue;
 
-    vertexBuffer =
-            vk::raii::su::BufferData(pd, dev, sizeof(Vertex) * cubeVertices.size(),
-                                     vk::BufferUsageFlagBits::eVertexBuffer | vk::BufferUsageFlagBits::eTransferDst,
-                                     vk::MemoryPropertyFlagBits::eDeviceLocal);
-
-    vertexBuffer->upload(pd, dev, cmdPool, queue, cubeVertices, sizeof(Vertex));
-
-    indexBuffer =
-            vk::raii::su::BufferData(pd, dev, sizeof(uint16_t) * cubeIndices.size(),
-                                     vk::BufferUsageFlagBits::eIndexBuffer | vk::BufferUsageFlagBits::eTransferDst,
-                                     vk::MemoryPropertyFlagBits::eDeviceLocal);
-
-    indexBuffer->upload(pd, dev, cmdPool, queue, cubeIndices, sizeof(uint16_t));
+    // vertexBuffer =
+    //         vk::raii::su::BufferData(pd, dev, sizeof(Vertex) * cubeVertices.size(),
+    //                                  vk::BufferUsageFlagBits::eVertexBuffer | vk::BufferUsageFlagBits::eTransferDst,
+    //                                  vk::MemoryPropertyFlagBits::eDeviceLocal);
+    //
+    // vertexBuffer->upload(pd, dev, cmdPool, queue, cubeVertices, sizeof(Vertex));
+    //
+    // indexBuffer =
+    //         vk::raii::su::BufferData(pd, dev, sizeof(uint16_t) * cubeIndices.size(),
+    //                                  vk::BufferUsageFlagBits::eIndexBuffer | vk::BufferUsageFlagBits::eTransferDst,
+    //                                  vk::MemoryPropertyFlagBits::eDeviceLocal);
+    //
+    // indexBuffer->upload(pd, dev, cmdPool, queue, cubeIndices, sizeof(uint16_t));
 
     uniformBuffer = vk::raii::su::BufferData(renderContext.physicalDevice, renderContext.device,
                                              sizeof(UniformBufferObject), vk::BufferUsageFlagBits::eUniformBuffer,
