@@ -392,121 +392,84 @@ namespace vk::raii::su {
         uint32_t offset;
     };
 
-    inline vk::raii::Pipeline makeGraphicsPipeline(
-    const vk::raii::Device& device,
-    const vk::raii::PipelineCache& pipelineCache,
-    const vk::raii::ShaderModule& vertexShaderModule,
-    const vk::raii::ShaderModule& fragmentShaderModule,
-    const uint32_t vertexStride,
-    const std::vector<VertexAttributeInfo>& vertexAttributes,
-    const vk::raii::PipelineLayout& pipelineLayout,
-    const vk::RenderPass& renderPass,
-    bool enableDepth,
-    vk::FrontFace frontFace = vk::FrontFace::eCounterClockwise
-) {
-    // Shader stages
-    std::array<vk::PipelineShaderStageCreateInfo, 2> shaderStages = {
-        vk::PipelineShaderStageCreateInfo{
-            {}, vk::ShaderStageFlagBits::eVertex, *vertexShaderModule, "main"
-        },
-        vk::PipelineShaderStageCreateInfo{
-            {}, vk::ShaderStageFlagBits::eFragment, *fragmentShaderModule, "main"
+    inline Pipeline makeGraphicsPipeline(const Device &device, const PipelineCache &pipelineCache,
+                                         const ShaderModule &vertexShaderModule,
+                                         const ShaderModule &fragmentShaderModule, const uint32_t vertexStride,
+                                         const std::vector<VertexAttributeInfo> &vertexAttributes,
+                                         const PipelineLayout &pipelineLayout, const vk::RenderPass &renderPass,
+                                         bool enableDepth, FrontFace frontFace = FrontFace::eCounterClockwise) {
+        // Shader stages
+        std::array shaderStages = {
+                PipelineShaderStageCreateInfo{{}, ShaderStageFlagBits::eVertex, *vertexShaderModule, "main"},
+                PipelineShaderStageCreateInfo{{}, ShaderStageFlagBits::eFragment, *fragmentShaderModule, "main"}};
+
+        // Vertex input layout
+        VertexInputBindingDescription bindingDesc{0, vertexStride, VertexInputRate::eVertex};
+
+        std::vector<VertexInputAttributeDescription> attributeDescs;
+        attributeDescs.reserve(vertexAttributes.size());
+        for (const auto &[location, binding, format, offset]: vertexAttributes) {
+            attributeDescs.emplace_back(location, binding, format, offset);
         }
-    };
 
-    // Vertex input layout
-    vk::VertexInputBindingDescription bindingDesc{
-        0, vertexStride, vk::VertexInputRate::eVertex
-    };
+        PipelineVertexInputStateCreateInfo vertexInputInfo{
+                {}, 1, &bindingDesc, static_cast<uint32_t>(attributeDescs.size()), attributeDescs.data()};
 
-    std::vector<vk::VertexInputAttributeDescription> attributeDescs;
-    attributeDescs.reserve(vertexAttributes.size());
-    for (const auto& attr : vertexAttributes) {
-        attributeDescs.emplace_back(attr.location, attr.binding, attr.format, attr.offset);
+        // Input assembly
+        PipelineInputAssemblyStateCreateInfo inputAssembly{{}, PrimitiveTopology::eTriangleList, VK_FALSE};
+
+        // Viewport & scissor (dynamic)
+        PipelineViewportStateCreateInfo viewportState{{}, 1, nullptr, 1, nullptr};
+
+        // Rasterization
+        PipelineRasterizationStateCreateInfo rasterizer{
+                {}, false, false, PolygonMode::eFill, CullModeFlagBits::eNone, frontFace, false, 0.f, 0.f, 0.f, 1.f};
+
+        // Multisampling
+        PipelineMultisampleStateCreateInfo multisampling{{}, SampleCountFlagBits::e1};
+
+        // Depth stencil
+        PipelineDepthStencilStateCreateInfo depthStencil{};
+        if (enableDepth) {
+            depthStencil = {{}, true, true, CompareOp::eLessOrEqual, false, false};
+        }
+
+        // Color blending
+        PipelineColorBlendAttachmentState colorBlendAttachment{false,
+                                                               BlendFactor::eZero,
+                                                               BlendFactor::eZero,
+                                                               BlendOp::eAdd,
+                                                               BlendFactor::eZero,
+                                                               BlendFactor::eZero,
+                                                               BlendOp::eAdd,
+                                                               ColorComponentFlagBits::eR | ColorComponentFlagBits::eG |
+                                                                       ColorComponentFlagBits::eB |
+                                                                       ColorComponentFlagBits::eA};
+
+        PipelineColorBlendStateCreateInfo colorBlending{{}, false, LogicOp::eNoOp, 1, &colorBlendAttachment};
+
+        // Dynamic states
+        std::array dynamicStates = {DynamicState::eViewport, DynamicState::eScissor};
+        PipelineDynamicStateCreateInfo dynamicState{{}, dynamicStates};
+
+        // Combine into pipeline
+        GraphicsPipelineCreateInfo pipelineInfo{{},
+                                                static_cast<uint32_t>(shaderStages.size()),
+                                                shaderStages.data(),
+                                                &vertexInputInfo,
+                                                &inputAssembly,
+                                                nullptr,
+                                                &viewportState,
+                                                &rasterizer,
+                                                &multisampling,
+                                                enableDepth ? &depthStencil : nullptr,
+                                                &colorBlending,
+                                                &dynamicState,
+                                                pipelineLayout,
+                                                renderPass};
+
+        return vk::raii::Pipeline(device, pipelineCache, pipelineInfo);
     }
-
-    vk::PipelineVertexInputStateCreateInfo vertexInputInfo{
-        {}, 1, &bindingDesc,
-        static_cast<uint32_t>(attributeDescs.size()), attributeDescs.data()
-    };
-
-    // Input assembly
-    vk::PipelineInputAssemblyStateCreateInfo inputAssembly{
-        {}, vk::PrimitiveTopology::eTriangleList, VK_FALSE
-    };
-
-    // Viewport & scissor (dynamic)
-    vk::PipelineViewportStateCreateInfo viewportState{
-        {}, 1, nullptr, 1, nullptr
-    };
-
-    // Rasterization
-    vk::PipelineRasterizationStateCreateInfo rasterizer{
-        {}, false, false,
-        vk::PolygonMode::eFill,
-        vk::CullModeFlagBits::eBack,
-        frontFace,
-        false, 0.f, 0.f, 0.f, 1.f
-    };
-
-    // Multisampling
-    vk::PipelineMultisampleStateCreateInfo multisampling{
-        {}, vk::SampleCountFlagBits::e1
-    };
-
-    // Depth stencil
-    vk::PipelineDepthStencilStateCreateInfo depthStencil{};
-    if (enableDepth) {
-        depthStencil = {
-            {}, true, true,
-            vk::CompareOp::eLessOrEqual,
-            false, false
-        };
-    }
-
-    // Color blending
-    vk::PipelineColorBlendAttachmentState colorBlendAttachment{
-        false,
-        vk::BlendFactor::eZero, vk::BlendFactor::eZero, vk::BlendOp::eAdd,
-        vk::BlendFactor::eZero, vk::BlendFactor::eZero, vk::BlendOp::eAdd,
-        vk::ColorComponentFlagBits::eR |
-        vk::ColorComponentFlagBits::eG |
-        vk::ColorComponentFlagBits::eB |
-        vk::ColorComponentFlagBits::eA
-    };
-
-    vk::PipelineColorBlendStateCreateInfo colorBlending{
-        {}, false, vk::LogicOp::eNoOp,
-        1, &colorBlendAttachment
-    };
-
-    // Dynamic states
-    std::array<vk::DynamicState, 2> dynamicStates = {
-        vk::DynamicState::eViewport,
-        vk::DynamicState::eScissor
-    };
-    vk::PipelineDynamicStateCreateInfo dynamicState{
-        {}, dynamicStates
-    };
-
-    // Combine into pipeline
-    GraphicsPipelineCreateInfo pipelineInfo{
-        {}, static_cast<uint32_t>(shaderStages.size()), shaderStages.data(),
-        &vertexInputInfo,
-        &inputAssembly,
-        nullptr,
-        &viewportState,
-        &rasterizer,
-        &multisampling,
-        enableDepth ? &depthStencil : nullptr,
-        &colorBlending,
-        &dynamicState,
-        pipelineLayout,
-        renderPass
-    };
-
-    return vk::raii::Pipeline(device, pipelineCache, pipelineInfo);
-}
 
     inline DescriptorSetLayout
     makeDescriptorSetLayout(Device const &device,
@@ -520,4 +483,158 @@ namespace vk::raii::su {
         const DescriptorSetLayoutCreateInfo descriptorSetLayoutCreateInfo(flags, bindings);
         return DescriptorSetLayout(device, descriptorSetLayoutCreateInfo);
     }
+
+    template<typename Func>
+    void oneTimeSubmit(Device const &device, CommandPool const &commandPool, Queue const &queue, Func const &func) {
+        CommandBuffer commandBuffer =
+                std::move(CommandBuffers(device, {*commandPool, CommandBufferLevel::ePrimary, 1}).front());
+        commandBuffer.begin(CommandBufferBeginInfo(CommandBufferUsageFlagBits::eOneTimeSubmit));
+        func(commandBuffer);
+        commandBuffer.end();
+        const SubmitInfo submitInfo(nullptr, nullptr, *commandBuffer);
+        queue.submit(submitInfo, nullptr);
+        queue.waitIdle();
+    }
+
+    inline DeviceMemory allocateDeviceMemory(Device const &device, PhysicalDevice const &physicalDevice,
+                                             MemoryRequirements const &memoryRequirements,
+                                             const MemoryPropertyFlags memoryPropertyFlags) {
+        const uint32_t memoryTypeIndex =
+                vk::su::findMemoryType(physicalDevice, memoryRequirements.memoryTypeBits, memoryPropertyFlags);
+        const MemoryAllocateInfo memoryAllocateInfo(memoryRequirements.size, memoryTypeIndex);
+        return DeviceMemory(device, memoryAllocateInfo);
+    }
+
+    template<typename T>
+    void copyToDevice(DeviceMemory const &deviceMemory, T const *pData, size_t count,
+                      DeviceSize stride = sizeof(T)) {
+        assert(sizeof(T) <= stride);
+        auto deviceData = static_cast<uint8_t *>(deviceMemory.mapMemory(0, count * stride));
+        if (stride == sizeof(T)) {
+            memcpy(deviceData, pData, count * sizeof(T));
+        } else {
+            for (size_t i = 0; i < count; i++) {
+                memcpy(deviceData, &pData[i], sizeof(T));
+                deviceData += stride;
+            }
+        }
+        deviceMemory.unmapMemory();
+    }
+
+    template<typename T>
+    void copyToDevice(DeviceMemory const &deviceMemory, T const &data) {
+        copyToDevice<T>(deviceMemory, &data, 1);
+    }
+
+    struct BufferData {
+        BufferData(PhysicalDevice const &physicalDevice, Device const &device, const DeviceSize size,
+                   const BufferUsageFlags usage,
+                   MemoryPropertyFlags propertyFlags = MemoryPropertyFlagBits::eHostVisible |
+                                                       MemoryPropertyFlagBits::eHostCoherent) :
+            buffer(device, BufferCreateInfo({}, size, usage))
+#if !defined(NDEBUG)
+            ,
+            m_size(size), m_usage(usage), m_propertyFlags(propertyFlags)
+#endif
+        {
+            deviceMemory = allocateDeviceMemory(device, physicalDevice, buffer.getMemoryRequirements(), propertyFlags);
+            buffer.bindMemory(deviceMemory, 0);
+        }
+
+        explicit BufferData(std::nullptr_t) : m_size{0} {}
+
+        template<typename DataType>
+        void upload(DataType const &data) const {
+            assert((m_propertyFlags & vk::MemoryPropertyFlagBits::eHostCoherent) &&
+                   (m_propertyFlags & vk::MemoryPropertyFlagBits::eHostVisible));
+            assert(sizeof(DataType) <= m_size);
+
+            void *dataPtr = deviceMemory.mapMemory(0, sizeof(DataType));
+            memcpy(dataPtr, &data, sizeof(DataType));
+            deviceMemory.unmapMemory();
+        }
+
+        template<typename DataType>
+        void upload(std::vector<DataType> const &data, const size_t stride = 0) const {
+            assert(m_propertyFlags & vk::MemoryPropertyFlagBits::eHostVisible);
+
+            size_t elementSize = stride ? stride : sizeof(DataType);
+            assert(sizeof(DataType) <= elementSize);
+
+            copyToDevice(deviceMemory, data.data(), data.size(), elementSize);
+        }
+
+        template<typename DataType>
+        void upload(PhysicalDevice const &physicalDevice, Device const &device, CommandPool const &commandPool,
+                    Queue const &queue, std::vector<DataType> const &data, const size_t stride) const {
+            assert(m_usage & vk::BufferUsageFlagBits::eTransferDst);
+            assert(m_propertyFlags & vk::MemoryPropertyFlagBits::eDeviceLocal);
+
+            size_t elementSize = stride ? stride : sizeof(DataType);
+            assert(sizeof(DataType) <= elementSize);
+
+            const size_t dataSize = data.size() * elementSize;
+            assert(dataSize <= m_size);
+
+            BufferData stagingBuffer(physicalDevice, device, dataSize, BufferUsageFlagBits::eTransferSrc);
+            copyToDevice(stagingBuffer.deviceMemory, data.data(), data.size(), elementSize);
+
+            su::oneTimeSubmit(device, commandPool, queue, [&](CommandBuffer const &commandBuffer) {
+                commandBuffer.copyBuffer(*stagingBuffer.buffer, *this->buffer, BufferCopy(0, 0, dataSize));
+            });
+        }
+
+        // the DeviceMemory should be destroyed before the Buffer it is bound to; to get that order with the standard
+        // destructor of the BufferData, the order of DeviceMemory and Buffer here matters
+        DeviceMemory deviceMemory = nullptr;
+        Buffer buffer = nullptr;
+#if !defined(NDEBUG)
+    private:
+        DeviceSize m_size;
+        BufferUsageFlags m_usage;
+        MemoryPropertyFlags m_propertyFlags;
+#endif
+    };
+
+    struct ImageData {
+        ImageData(PhysicalDevice const &physicalDevice, Device const &device, const Format format_,
+                  Extent2D const &extent, ImageTiling tiling, const ImageUsageFlags usage, ImageLayout initialLayout,
+                  const MemoryPropertyFlags memoryProperties, ImageAspectFlags aspectMask) :
+            format(format_), image(device, {ImageCreateFlags(),
+                                            ImageType::e2D,
+                                            format,
+                                            Extent3D(extent, 1),
+                                            1,
+                                            1,
+                                            SampleCountFlagBits::e1,
+                                            tiling,
+                                            usage | ImageUsageFlagBits::eSampled,
+                                            SharingMode::eExclusive,
+                                            {},
+                                            initialLayout}) {
+            deviceMemory =
+                    allocateDeviceMemory(device, physicalDevice, image.getMemoryRequirements(), memoryProperties);
+            image.bindMemory(deviceMemory, 0);
+            imageView = ImageView(
+                    device, ImageViewCreateInfo({}, image, ImageViewType::e2D, format, {}, {aspectMask, 0, 1, 0, 1}));
+        }
+
+        explicit ImageData(std::nullptr_t) : format{} {}
+
+        // the DeviceMemory should be destroyed before the Image it is bound to; to get that order with the standard
+        // destructor
+        // of the ImageData, the order of DeviceMemory and Image here matters
+        Format format;
+        DeviceMemory deviceMemory = nullptr;
+        Image image = nullptr;
+        ImageView imageView = nullptr;
+    };
+
+    struct DepthBufferData : ImageData {
+        DepthBufferData(PhysicalDevice const &physicalDevice, Device const &device, const Format format,
+                        Extent2D const &extent) :
+            ImageData(physicalDevice, device, format, extent, ImageTiling::eOptimal,
+                      ImageUsageFlagBits::eDepthStencilAttachment, ImageLayout::eUndefined,
+                      MemoryPropertyFlagBits::eDeviceLocal, ImageAspectFlagBits::eDepth) {}
+    };
 } // namespace vk::raii::su

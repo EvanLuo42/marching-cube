@@ -14,9 +14,9 @@ struct VertexOutput
 
 cbuffer CameraBuffer : register(b0)
 {
-    float4x4 model;
-    float4x4 view;
-    float4x4 proj;
+    row_major float4x4 model;
+    row_major float4x4 view;
+    row_major float4x4 proj;
 };
 
 [shader("vertex")]
@@ -28,7 +28,7 @@ VertexOutput vertexMain(VertexInput input)
     output.position = mul(proj, viewPos);
 
     output.uv     = input.uv;
-    output.normal = mul((float3x3)model, input.normal);
+    output.normal = normalize(mul((float3x3)model, input.normal));
     return output;
 }
 
@@ -39,5 +39,5 @@ float4 fragmentMain(VertexOutput input) : SV_Target
     float lighting = max(dot(normalize(input.normal), lightDir), 0.0);
 
     float3 baseColor = float3(1.0, 0.6, 0.3);
-    return float4(baseColor * lighting, 1.0);
+    return float4(baseColor, 1.0);
 }

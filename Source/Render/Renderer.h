@@ -2,21 +2,41 @@
 #include "../Resource/ShaderManager.h"
 #include "RenderContext.h"
 
-#include <imgui.h>
-#include <backends/imgui_impl_vulkan.h>
 #include <backends/imgui_impl_glfw.h>
+#include <backends/imgui_impl_vulkan.h>
+#include <imgui.h>
 
-static void checkVkResult(const VkResult err) {
-    if (err == VK_SUCCESS)
-        return;
-    fprintf(stderr, "[vulkan] Error: VkResult = %d\n", err);
-    if (err < 0)
-        abort();
-}
+#include "Camera.h"
+#include "Vertex.h"
+
+const std::vector<Vertex> cubeVertices = {
+    // Front face
+    {{-0.5f, -0.5f,  0.5f}, {0, 0}, {0, 0, 1}},
+    {{ 0.5f, -0.5f,  0.5f}, {1, 0}, {0, 0, 1}},
+    {{ 0.5f,  0.5f,  0.5f}, {1, 1}, {0, 0, 1}},
+    {{-0.5f,  0.5f,  0.5f}, {0, 1}, {0, 0, 1}},
+
+    // Back face
+    {{-0.5f, -0.5f, -0.5f}, {1, 0}, {0, 0, -1}},
+    {{ 0.5f, -0.5f, -0.5f}, {0, 0}, {0, 0, -1}},
+    {{ 0.5f,  0.5f, -0.5f}, {0, 1}, {0, 0, -1}},
+    {{-0.5f,  0.5f, -0.5f}, {1, 1}, {0, 0, -1}},
+};
+
+const std::vector<uint16_t> cubeIndices = {
+    0, 1, 2, 2, 3, 0,       // front
+    4, 6, 5, 6, 4, 7,       // back
+    4, 5, 1, 1, 0, 4,       // bottom
+    3, 2, 6, 6, 7, 3,       // top
+    1, 5, 6, 6, 2, 1,       // right
+    4, 0, 3, 3, 7, 4        // left
+};
 
 class Renderer {
     RenderContext renderContext;
     ShaderManager shaderManager;
+
+    Camera camera;
 
     vk::raii::RenderPass uiRenderPass = nullptr;
     vk::raii::RenderPass forwardRenderPass = nullptr;
@@ -24,14 +44,13 @@ class Renderer {
     vk::raii::DescriptorPool uiDescriptorPool = nullptr;
     vk::raii::DescriptorPool forwardDescriptorPool = nullptr;
     vk::raii::DescriptorSetLayout forwardDescriptorSetLayout = nullptr;
+    vk::raii::DescriptorSet forwardDescriptorSet = nullptr;
 
     vk::raii::PipelineCache pipelineCache = nullptr;
     vk::raii::PipelineLayout forwardPipelineLayout = nullptr;
     vk::raii::Pipeline forwardPipeline = nullptr;
 
-    vk::raii::Image forwardDepthImage = nullptr;
-    vk::raii::DeviceMemory forwardDepthMemory = nullptr;
-    vk::raii::ImageView forwardDepthImageView = nullptr;
+    std::optional<vk::raii::su::DepthBufferData> forwardDepthBuffer;
 
     std::vector<vk::raii::CommandBuffer> uiCommandBuffers;
     std::vector<vk::raii::CommandBuffer> forwardCommandBuffers;
@@ -44,6 +63,10 @@ class Renderer {
     std::vector<vk::raii::Semaphore> renderFinishedSemaphores;
     std::vector<vk::raii::Fence> inFlightFences;
 
+    std::optional<vk::raii::su::BufferData> vertexBuffer;
+    std::optional<vk::raii::su::BufferData> indexBuffer;
+    std::optional<vk::raii::su::BufferData> uniformBuffer;
+
     size_t currentFrame = 0;
     const int maxFramesInFlight = 2;
 
@@ -51,7 +74,7 @@ class Renderer {
     uint32_t currentImageIndex = 0;
 
 public:
-    explicit Renderer(GLFWwindow *window) : renderContext{window} {
+    explicit Renderer(GLFWwindow *window) : renderContext{window}, camera{window} {
         shaderManager.compile();
 
         ImGui::CreateContext();
@@ -67,6 +90,7 @@ public:
         initRenderPasses();
         initPipelineLayout();
         initRenderPipelines();
+        initBuffers();
 
         initFrameBuffers();
         initSemaphoresAndFences();
@@ -83,11 +107,13 @@ public:
 
     void beginFrame();
 
-    void renderScene();
+    void renderScene() const;
 
     void renderUI();
 
     void endFrame();
+
+    void cameraUpdate();
 
 private:
     void initRenderPasses();
@@ -99,4 +125,6 @@ private:
     void initPipelineLayout();
     void initRenderPipelines();
     void initImGui(GLFWwindow* window) const;
+
+    void initBuffers();
 };

@@ -15,6 +15,8 @@ int main() {
     while (!glfwWindowShouldClose(window)) {
         glfwPollEvents();
 
+        renderer.cameraUpdate();
+
         renderer.beginFrame();
 
         ImGui::ShowDemoWindow();

@@ -1,24 +1,37 @@
 #include "Renderer.h"
 
+#include "UniformBufferObject.h"
+
+#include <glm/gtc/matrix_transform.hpp>
+
 void Renderer::beginFrame() {
     ImGui_ImplVulkan_NewFrame();
     ImGui_ImplGlfw_NewFrame();
     ImGui::NewFrame();
-}
 
-void Renderer::renderScene() {
     renderContext.device.waitForFences(*inFlightFences[currentImageIndex], true, UINT64_MAX);
     renderContext.device.resetFences(*inFlightFences[currentImageIndex]);
 
     auto [_, imageIndex] = renderContext.swapChainData->swapChain.acquireNextImage(
             INT_MAX, *imageAvailableSemaphores[currentImageIndex]);
+    currentImageIndex = imageIndex;
+}
 
-    const vk::raii::CommandBuffer &cmd = forwardCommandBuffers[imageIndex];
+void Renderer::renderScene() const {
+    UniformBufferObject ubo{};
+    ubo.model = glm::identity<glm::mat4>();
+    ubo.view = camera.getViewMatrix();
+    ubo.proj = glm::ortho(-1.0f, 1.0f, -1.0f, 1.0f, 0.1f, 100.0f);
+    ubo.proj[1][1] *= -1;
+
+    uniformBuffer->upload(ubo);
+
+    const vk::raii::CommandBuffer &cmd = forwardCommandBuffers[currentImageIndex];
     cmd.reset();
     cmd.begin({vk::CommandBufferUsageFlagBits::eOneTimeSubmit});
 
     std::array<vk::ClearValue, 2> clearValues;
-    clearValues[0].color = vk::ClearColorValue(0.0f, 0.623f, 0.717f, 1.0f);
+    clearValues[0].color = vk::ClearColorValue(0.0f, 0.0f, 0.0f, 1.0f);
     clearValues[1].depthStencil = vk::ClearDepthStencilValue(1.0f, 0);
 
     const vk::RenderPassBeginInfo renderPassBeginInfo{
@@ -29,15 +42,31 @@ void Renderer::renderScene() {
 
     // Clear + Begin RenderPass + Bind + Draw
 
+    cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *forwardPipeline);
+
+    const vk::Viewport viewport{
+            0.0f, 0.0f, static_cast<float>(swapchainExtent.width), static_cast<float>(swapchainExtent.height),
+            0.0f, 1.0f};
+    cmd.setViewport(0, viewport);
+
+    const vk::Rect2D scissor{{0, 0}, swapchainExtent};
+    cmd.setScissor(0, scissor);
+
+    cmd.bindVertexBuffers(0, {*vertexBuffer->buffer}, {0});
+    cmd.bindIndexBuffer(*indexBuffer->buffer, 0, vk::IndexType::eUint16);
+
+    cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, *forwardPipelineLayout, 0, *forwardDescriptorSet, nullptr);
+
+    cmd.drawIndexed(static_cast<uint32_t>(cubeIndices.size()), 1, 0, 0, 0);
+
     cmd.endRenderPass();
     cmd.end();
 
     vk::PipelineStageFlags waitStage = vk::PipelineStageFlagBits::eColorAttachmentOutput;
-    const vk::SubmitInfo submitInfo = {*imageAvailableSemaphores[imageIndex], waitStage, *cmd,
-                                       *forwardFinishedSemaphores[imageIndex]};
+    const vk::SubmitInfo submitInfo = {*imageAvailableSemaphores[currentImageIndex], waitStage, *cmd,
+                                       *forwardFinishedSemaphores[currentImageIndex]};
 
     renderContext.graphicsQueue.submit(submitInfo);
-    currentImageIndex = imageIndex;
 }
 
 void Renderer::renderUI() {
@@ -73,6 +102,8 @@ void Renderer::endFrame() {
     currentImageIndex = (currentImageIndex + 1) % imageAvailableSemaphores.size();
 }
 
+void Renderer::cameraUpdate() { camera.update(); }
+
 void Renderer::initRenderPasses() {
     const vk::Format colorFormat = vk::su::pickSurfaceFormat(renderContext.physicalDevice.getSurfaceFormatsKHR(
                                                                      renderContext.surfaceData->surface))
@@ -103,7 +134,7 @@ void Renderer::initDescriptorPools() {
 
 void Renderer::initFrameBuffers() {
     for (const auto &imageView: renderContext.swapChainData->imageViews) {
-        vk::ImageView attachments[] = {*imageView, *forwardDepthImageView};
+        vk::ImageView attachments[] = {*imageView, *forwardDepthBuffer.value().imageView};
         vk::FramebufferCreateInfo fbInfo({}, *forwardRenderPass, 2, attachments, swapchainExtent.width,
                                          swapchainExtent.height, 1);
         forwardFrameBuffers.emplace_back(renderContext.device, fbInfo);
@@ -119,22 +150,8 @@ void Renderer::initFrameBuffers() {
 void Renderer::initDepthResources() {
     constexpr auto depthFormat = vk::Format::eD32Sfloat;
 
-    vk::ImageCreateInfo imageInfo(
-            {}, vk::ImageType::e2D, depthFormat, vk::Extent3D{swapchainExtent.width, swapchainExtent.height, 1}, 1, 1,
-            vk::SampleCountFlagBits::e1, vk::ImageTiling::eOptimal, vk::ImageUsageFlagBits::eDepthStencilAttachment);
-
-    forwardDepthImage = {renderContext.device, imageInfo};
-    const vk::MemoryRequirements memRequirements = forwardDepthImage.getMemoryRequirements();
-
-    vk::MemoryAllocateInfo allocInfo(
-            memRequirements.size, vk::su::findMemoryType(renderContext.physicalDevice, memRequirements.memoryTypeBits,
-                                                         vk::MemoryPropertyFlagBits::eDeviceLocal));
-    forwardDepthMemory = {renderContext.device, allocInfo};
-    forwardDepthImage.bindMemory(*forwardDepthMemory, 0);
-
-    vk::ImageViewCreateInfo viewInfo({}, *forwardDepthImage, vk::ImageViewType::e2D, depthFormat, {},
-                                     {vk::ImageAspectFlagBits::eDepth, 0, 1, 0, 1});
-    forwardDepthImageView = {renderContext.device, viewInfo};
+    forwardDepthBuffer = vk::raii::su::DepthBufferData(renderContext.physicalDevice, renderContext.device, depthFormat,
+                                                       swapchainExtent);
 }
 
 void Renderer::initCommandBuffers() {
@@ -207,6 +224,42 @@ void Renderer::initImGui(GLFWwindow *window) const {
     initInfo.MinImageCount = 2;
     initInfo.ImageCount = renderContext.swapChainData.value().swapChain.getImages().size();
     initInfo.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
-    initInfo.CheckVkResultFn = checkVkResult;
+    initInfo.CheckVkResultFn = nullptr;
     ImGui_ImplVulkan_Init(&initInfo);
+}
+
+void Renderer::initBuffers() {
+    const auto &pd = renderContext.physicalDevice;
+    const auto &dev = renderContext.device;
+    const auto &cmdPool = renderContext.commandPool;
+    const auto &queue = renderContext.graphicsQueue;
+
+    vertexBuffer =
+            vk::raii::su::BufferData(pd, dev, sizeof(Vertex) * cubeVertices.size(),
+                                     vk::BufferUsageFlagBits::eVertexBuffer | vk::BufferUsageFlagBits::eTransferDst,
+                                     vk::MemoryPropertyFlagBits::eDeviceLocal);
+
+    vertexBuffer->upload(pd, dev, cmdPool, queue, cubeVertices, sizeof(Vertex));
+
+    indexBuffer =
+            vk::raii::su::BufferData(pd, dev, sizeof(uint16_t) * cubeIndices.size(),
+                                     vk::BufferUsageFlagBits::eIndexBuffer | vk::BufferUsageFlagBits::eTransferDst,
+                                     vk::MemoryPropertyFlagBits::eDeviceLocal);
+
+    indexBuffer->upload(pd, dev, cmdPool, queue, cubeIndices, sizeof(uint16_t));
+
+    uniformBuffer = vk::raii::su::BufferData(renderContext.physicalDevice, renderContext.device,
+                                             sizeof(UniformBufferObject), vk::BufferUsageFlagBits::eUniformBuffer,
+                                             vk::MemoryPropertyFlagBits::eHostVisible |
+                                                     vk::MemoryPropertyFlagBits::eHostCoherent);
+
+    const vk::DescriptorSetAllocateInfo allocInfo{*forwardDescriptorPool, 1, &*forwardDescriptorSetLayout};
+    forwardDescriptorSet = std::move(renderContext.device.allocateDescriptorSets(allocInfo).front());
+
+    vk::DescriptorBufferInfo bufferInfo{*uniformBuffer->buffer, 0, sizeof(UniformBufferObject)};
+
+    const vk::WriteDescriptorSet write{
+            *forwardDescriptorSet, 0, 0, 1, vk::DescriptorType::eUniformBuffer, nullptr, &bufferInfo};
+
+    renderContext.device.updateDescriptorSets(write, nullptr);
 }

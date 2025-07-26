@@ -18,6 +18,10 @@ add_executable(marching_cube Source/main.cpp
         Source/Render/Renderer.h
         Source/Render/Utils.h
         Source/Render/Utils.cpp
+        Source/Render/Vertex.h
+        Source/Render/UniformBufferObject.h
+        Source/Render/Camera.cpp
+        Source/Render/Camera.h
 )
 
 target_include_directories(marching_cube PRIVATE
